@@ -1,4 +1,4 @@
-name: Deploy Mlay Service to GitHub Pages
+name: Deploy Mlay Service V2
 
 on:
   push:
@@ -29,33 +29,56 @@ jobs:
           ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" -printf "%T@ %p\n" | sort -nr | head -n 1 | cut -d' ' -f2-)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "Aucun fichier ZIP trouvé à la racine du dépôt."
+            echo "Aucun ZIP trouvé."
             exit 1
           fi
 
-          echo "ZIP détecté : $ZIP_FILE"
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+          echo "ZIP détecté : $ZIP_FILE"
 
       - name: Extract website
         shell: bash
         run: |
-          rm -rf site
-          mkdir -p site
+          rm -rf site extracted
+          mkdir -p site extracted
 
           unzip -q "$ZIP_FILE" -d extracted
 
           INDEX_FILE=$(find extracted -type f -name "index.html" | head -n 1)
 
           if [ -z "$INDEX_FILE" ]; then
-            echo "ERREUR : index.html introuvable dans le ZIP."
+            echo "index.html introuvable"
             exit 1
           fi
 
           SITE_DIR=$(dirname "$INDEX_FILE")
 
-          echo "Dossier du site : $SITE_DIR"
+          echo "SITE_DIR=$SITE_DIR" >> "$GITHUB_ENV"
 
           cp -R "$SITE_DIR"/. site/
+
+          rm -rf site/.github
+
+      - name: Inject Firebase API key
+        shell: bash
+        env:
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+        run: |
+          if [ -z "$FIREBASE_API_KEY" ]; then
+            echo "ERREUR : FIREBASE_API_KEY est vide."
+            exit 1
+          fi
+
+          CONFIG_FILE="site/firebase-config.js"
+
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "ERREUR : firebase-config.js introuvable."
+            exit 1
+          fi
+
+          sed -i "s|REMPLACE_ICI_PAR_TA_VRAIE_API_KEY_FIREBASE|${FIREBASE_API_KEY}|g" "$CONFIG_FILE"
+
+          echo "Configuration Firebase injectée."
 
       - name: Ensure 404 fallback
         shell: bash
@@ -81,6 +104,6 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - name: Deploy to GitHub Pages
+      - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
